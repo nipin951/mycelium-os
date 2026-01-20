@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#121212">
+    <title>Mycelium OS</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0a;
+            --text-color: #e0e0e0;
+            --accent-green: #00ff41;
+            --accent-dim: #008f11;
+            --accent-purple: #9d4edd;
+            --accent-blue: #00d4ff;
+            --alert: #ff4444;
+            --warning: #ff8c00;
+            --card-bg: #151515;
+            --rest-color: #6a5acd;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'SF Mono', 'Courier New', monospace;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+        
+        /* Lock Screen */
+        .lock-screen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .lock-screen.hidden { display: none; }
+        .lock-logo { font-size: 4rem; margin-bottom: 20px; }
+        .lock-title { font-size: 1.2rem; color: var(--accent-green); margin-bottom: 30px; letter-spacing: 2px; }
+        .lock-input {
+            width: 200px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            color: var(--accent-green);
+            font-family: inherit;
+            font-size: 1.2rem;
+            text-align: center;
+            letter-spacing: 8px;
+            outline: none;
+            -webkit-text-security: disc;
+        }
+        .lock-input:focus { border-color: var(--accent-green); }
+        .lock-error { color: var(--alert); font-size: 0.8rem; margin-top: 15px; height: 20px; }
+        .lock-hint { color: #444; font-size: 0.7rem; margin-top: 30px; }
+
+        /* Main App */
+        .app-container {
+            display: none;
+            padding: 12px;
+            padding-top: max(12px, env(safe-area-inset-top));
+            padding-bottom: max(70px, calc(env(safe-area-inset-bottom) + 60px));
+        }
+        .app-container.active { display: block; }
+        
+        .nav-tabs {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            display: none;
+            background: #111;
+            border-top: 1px solid #222;
+            padding: 8px 4px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
+            z-index: 50;
+        }
+        .nav-tabs.active { display: flex; }
+        .nav-tab {
+            flex: 1;
+            padding: 8px 4px;
+            text-align: center;
+            font-size: 0.55rem;
+            color: #555;
+            cursor: pointer;
+        }
+        .nav-tab.active { color: var(--accent-green); }
+        .nav-tab-icon { font-size: 1.2rem; display: block; margin-bottom: 2px; }
+        
+        .page { display: none; }
+        .page.active { display: block; }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #222;
+        }
+        .time { font-size: 2.2rem; font-weight: bold; color: var(--accent-green); line-height: 1; }
+        .date { font-size: 0.7rem; color: #555; margin-top: 4px; }
+        .header-right { text-align: right; }
+        .week-num { font-size: 0.6rem; color: #444; letter-spacing: 1px; }
+        .question-count { font-size: 1.8rem; color: var(--accent-green); line-height: 1; }
+        .question-label { font-size: 0.55rem; color: #555; }
+        
+        .sync-status { font-size: 0.6rem; padding: 4px 8px; border-radius: 4px; margin-top: 4px; display: inline-block; }
+        .sync-status.connected { background: #001a00; color: var(--accent-green); }
+        .sync-status.disconnected { background: #1a1a00; color: #888800; }
+        .sync-status.syncing { background: #001a1a; color: var(--accent-blue); }
+
+        .status-card {
+            background: var(--card-bg);
+            border: 1px solid #222;
+            padding: 14px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+        }
+        .mode-label { font-size: 0.6rem; color: #444; letter-spacing: 2px; }
+        .current-mode { font-size: 1.3rem; margin: 6px 0; font-weight: bold; text-transform: uppercase; color: var(--accent-green); }
+        .instruction { font-size: 0.8rem; line-height: 1.5; color: #888; }
+        .progress-container { background: #222; height: 3px; border-radius: 2px; margin-top: 12px; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--accent-green); transition: width 1s linear; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+        .stat-box { background: var(--card-bg); border: 1px solid #222; padding: 10px 8px; border-radius: 8px; text-align: center; }
+        .stat-label { font-size: 0.5rem; color: #555; letter-spacing: 1px; }
+        .stat-value { font-size: 1.1rem; color: var(--accent-green); margin-top: 4px; }
+        .stat-box.editable { cursor: pointer; }
+
+        .question-card {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+            border: 1px solid var(--accent-green);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .question-card-label { font-size: 0.6rem; color: var(--accent-green); letter-spacing: 1px; margin-bottom: 8px; }
+        .question-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #333;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.9rem;
+            padding: 6px 0;
+            outline: none;
+        }
+
+        .task-list { margin-bottom: 12px; }
+        .task-item {
+            display: flex;
+            align-items: center;
+            background: #1a1a1a;
+            margin-bottom: 6px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            border-left: 3px solid var(--accent-green);
+        }
+        .task-item:active { transform: scale(0.98); }
+        .task-item.done { opacity: 0.35; border-left-color: #333; }
+        .checkbox {
+            width: 20px; height: 20px;
+            border: 2px solid #444;
+            margin-right: 10px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+        }
+        .task-item.done .checkbox { background: var(--accent-green); border-color: var(--accent-green); color: #000; }
+        .task-text { font-size: 0.85rem; }
+
+        .output-section { background: var(--card-bg); border: 1px solid #222; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+        .output-label { font-size: 0.6rem; color: #555; letter-spacing: 1px; margin-bottom: 10px; }
+        .output-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .output-btn {
+            padding: 12px 8px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.65rem;
+            cursor: pointer;
+            border: 1px solid;
+        }
+        .output-btn:active { transform: scale(0.95); }
+        .output-btn.work { background: #001a00; border-color: var(--accent-green); color: var(--accent-green); }
+        .output-btn.fail { background: #1a1a00; border-color: #888800; color: #cccc00; }
+        .output-btn.survive { background: #0a0a1a; border-color: var(--accent-purple); color: var(--accent-purple); }
+        .output-btn-icon { font-size: 1.2rem; display: block; margin-bottom: 4px; }
+
+        .log-card { background: var(--card-bg); border: 1px solid #222; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+        .log-label { font-size: 0.6rem; color: #555; letter-spacing: 1px; margin-bottom: 6px; }
+        .log-textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--accent-green);
+            font-family: inherit;
+            font-size: 0.8rem;
+            resize: none;
+            outline: none;
+            height: 45px;
+        }
+
+        .alert-row { display: flex; gap: 8px; }
+        .alert-btn { flex: 1; padding: 12px; border-radius: 8px; text-align: center; font-size: 0.7rem; cursor: pointer; border: 1px solid; }
+        .alert-btn.fire { background: #1a0a00; border-color: var(--warning); color: var(--warning); }
+        .alert-btn.emergency { background: #1a0000; border-color: #550000; color: var(--alert); }
+
+        .script-card { background: var(--card-bg); border: 1px solid #222; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+        .script-situation { font-size: 0.7rem; color: var(--accent-purple); margin-bottom: 6px; }
+        .script-text { font-size: 0.85rem; color: #ccc; line-height: 1.5; padding: 10px; background: #0a0a0a; border-radius: 6px; border-left: 2px solid var(--accent-purple); }
+        .script-copy { margin-top: 8px; padding: 8px; background: #1a1a2a; border: 1px solid var(--accent-purple); border-radius: 6px; color: var(--accent-purple); font-size: 0.7rem; text-align: center; cursor: pointer; }
+
+        .settings-section { background: var(--card-bg); border: 1px solid #222; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+        .settings-section-title { font-size: 0.7rem; color: var(--accent-green); letter-spacing: 1px; margin-bottom: 12px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #222; }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-label { font-size: 0.8rem; color: #aaa; }
+        .setting-input { width: 80px; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; color: var(--accent-green); font-family: inherit; font-size: 0.9rem; padding: 8px; text-align: center; outline: none; }
+        .setting-input:focus { border-color: var(--accent-green); }
+        .setting-input.wide { width: 100%; text-align: left; font-size: 0.75rem; }
+
+        .activity-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 0.75rem; }
+        .activity-time { color: #555; flex-shrink: 0; width: 45px; }
+        .activity-icon { flex-shrink: 0; }
+        .activity-text { color: #aaa; flex-grow: 1; }
+        .activity-empty { text-align: center; color: #444; padding: 30px; font-size: 0.8rem; }
+
+        .history-item { background: var(--card-bg); border: 1px solid #222; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+        .history-date { font-size: 0.65rem; color: #555; }
+        .history-type { font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-left: 8px; }
+        .history-type.work { background: #001a00; color: var(--accent-green); }
+        .history-type.fail { background: #1a1a00; color: #cccc00; }
+        .history-type.survive { background: #0a0a1a; color: var(--accent-purple); }
+        .history-type.setting { background: #001a1a; color: var(--accent-blue); }
+        .history-content { font-size: 0.85rem; color: #ccc; margin-top: 6px; }
+        .history-empty { text-align: center; color: #444; padding: 40px 20px; font-size: 0.8rem; }
+
+        .export-btn { width: 100%; padding: 12px; background: #0a1a1a; border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--accent-blue); font-family: inherit; font-size: 0.8rem; cursor: pointer; margin-bottom: 8px; }
+        .export-btn:active { background: #0a2a2a; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--card-bg); border: 1px solid #333; border-radius: 12px; padding: 20px; width: 100%; max-width: 340px; max-height: 80vh; overflow-y: auto; }
+        .modal-title { font-size: 1rem; color: var(--accent-green); margin-bottom: 12px; }
+        .modal-text { font-size: 0.85rem; color: #aaa; line-height: 1.6; margin-bottom: 16px; }
+        .modal-btn { width: 100%; padding: 12px; background: var(--accent-green); border: none; border-radius: 8px; color: #000; font-family: inherit; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
+        .modal-btn.secondary { background: transparent; border: 1px solid #333; color: #888; margin-top: 8px; }
+
+        .transmutation-mode .current-mode { color: #ff00ff; }
+        .transmutation-mode .time { color: #ff00ff; }
+        .transmutation-mode .status-card { border-color: #ff00ff; box-shadow: 0 0 30px rgba(255,0,255,0.15); }
+        .transmutation-mode .task-item { border-left-color: #ff00ff; }
+        .transmutation-mode .progress-bar { background: #ff00ff; }
+        
+        .rest-mode .current-mode { color: var(--rest-color); }
+        .rest-mode .status-card { border-color: var(--rest-color); }
+        .rest-mode .task-item { border-left-color: var(--rest-color); }
+        .rest-mode .progress-bar { background: var(--rest-color); }
+
+        .page-title { font-size: 1rem; color: #888; margin-bottom: 16px; font-weight: normal; }
+        .page-title span { color: var(--accent-green); }
+
+        .sub-tabs { display: flex; gap: 4px; margin-bottom: 16px; background: #111; padding: 4px; border-radius: 8px; }
+        .sub-tab { flex: 1; padding: 10px; text-align: center; font-size: 0.7rem; color: #555; border-radius: 6px; cursor: pointer; }
+        .sub-tab.active { background: var(--card-bg); color: var(--accent-green); }
+
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--card-bg);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            z-index: 200;
+            display: none;
+        }
+        .toast.show { display: block; animation: fadeInOut 2s ease; }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            85% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Lock Screen -->
+    <div class="lock-screen" id="lockScreen">
+        <div class="lock-logo">🍄</div>
+        <div class="lock-title">MYCELIUM OS</div>
+        <input type="password" class="lock-input" id="passwordInput" placeholder="••••" maxlength="20" autofocus>
+        <div class="lock-error" id="lockError"></div>
+        <div class="lock-hint">初回は任意のパスワードを設定</div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- App Container -->
+    <div class="app-container" id="appContainer">
+        <!-- Main Page -->
+        <div class="page active" id="page-main">
+            <div class="header">
+                <div>
+                    <div class="time" id="clock">00:00</div>
+                    <div class="date" id="date">Loading...</div>
+                    <div class="sync-status disconnected" id="syncStatus">● Offline</div>
+                </div>
+                <div class="header-right">
+                    <div class="week-num" id="weekNum">WEEK 1</div>
+                    <div class="question-count" id="questionCount">0</div>
+                    <div class="question-label">OUTPUTS</div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <div class="mode-label">CURRENT PROTOCOL</div>
+                <div class="current-mode" id="modeText">LOADING...</div>
+                <div class="instruction" id="instructionText">...</div>
+                <div class="progress-container"><div class="progress-bar" id="progressBar"></div></div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box editable" onclick="showPage('settings')">
+                    <div class="stat-label">DEBT</div>
+                    <div class="stat-value" id="debtDisplay">¥200万</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">STREAK</div>
+                    <div class="stat-value" id="streakDisplay">0週</div>
+                </div>
+                <div class="stat-box editable" onclick="showPage('settings')">
+                    <div class="stat-label">WORKS</div>
+                    <div class="stat-value" id="worksDisplay">1</div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-card-label">📡 THIS WEEK'S QUESTION</div>
+                <input type="text" class="question-input" id="weeklyQuestion" placeholder="例: 菌糸で顔を作ったらどうなるか？">
+            </div>
+
+            <div class="task-list" id="taskList"></div>
+
+            <div class="output-section">
+                <div class="output-label">📤 RECORD OUTPUT</div>
+                <div class="output-buttons">
+                    <div class="output-btn work" onclick="recordOutput('work')"><span class="output-btn-icon">✨</span>作品</div>
+                    <div class="output-btn fail" onclick="recordOutput('fail')"><span class="output-btn-icon">💀</span>失敗</div>
+                    <div class="output-btn survive" onclick="recordOutput('survive')"><span class="output-btn-icon">🫀</span>生存</div>
+                </div>
+            </div>
+
+            <div class="log-card">
+                <div class="log-label">🔍 SCAVENGE LOG</div>
+                <textarea class="log-textarea" id="logInput" placeholder="都市のバグを入力..."></textarea>
+            </div>
+
+            <div class="alert-row">
+                <div class="alert-btn fire" onclick="showFireWarning()">🔥 火に焼かれそう</div>
+                <div class="alert-btn emergency" onclick="showEmergency()">⚠️ ABORT</div>
+            </div>
+        </div>
+
+        <!-- Scripts Page -->
+        <div class="page" id="page-scripts">
+            <h2 class="page-title">🛡️ <span>防衛スクリプト</span></h2>
+            <div class="script-card">
+                <div class="script-situation">📋 頼まれごとをされた時</div>
+                <div class="script-text">「承知しました。今は手一杯なので、〇時以降なら着手できますがよろしいですか？」</div>
+                <div class="script-copy" onclick="copyScript(this)">📋 コピー</div>
+            </div>
+            <div class="script-card">
+                <div class="script-situation">💬 雑談を振られた時</div>
+                <div class="script-text">「それは大変でしたね。で、例の件はどうなりました？」</div>
+                <div class="script-copy" onclick="copyScript(this)">📋 コピー</div>
+            </div>
+            <div class="script-card">
+                <div class="script-situation">🙅 断る時</div>
+                <div class="script-text">「申し訳ないのですが、今週はキャパが厳しくて。来週以降なら調整できるかもしれません。」</div>
+                <div class="script-copy" onclick="copyScript(this)">📋 コピー</div>
+            </div>
+            <div class="script-card">
+                <div class="script-situation">🤝 小さな親切をする時</div>
+                <div class="script-text">「もしよければ、〇〇しておきましょうか？」</div>
+                <div class="script-copy" onclick="copyScript(this)">📋 コピー</div>
+            </div>
+            <div class="script-card">
+                <div class="script-situation">🏃 定時退社する時</div>
+                <div class="script-text">「お先に失礼します。何かあれば明日対応しますね。」</div>
+                <div class="script-copy" onclick="copyScript(this)">📋 コピー</div>
+            </div>
+        </div>
+
+        <!-- Log Page -->
+        <div class="page" id="page-log">
+            <h2 class="page-title">📜 <span>活動ログ</span></h2>
+            <div class="sub-tabs">
+                <div class="sub-tab active" onclick="showLogTab('activity')">今日</div>
+                <div class="sub-tab" onclick="showLogTab('history')">出力履歴</div>
+                <div class="sub-tab" onclick="showLogTab('changes')">変更</div>
+            </div>
+            <div id="logTab-activity" class="log-tab-content"><div id="activityList"></div></div>
+            <div id="logTab-history" class="log-tab-content" style="display:none;"><div id="historyList"></div></div>
+            <div id="logTab-changes" class="log-tab-content" style="display:none;"><div id="changesList"></div></div>
+        </div>
+
+        <!-- Settings Page -->
+        <div class="page" id="page-settings">
+            <h2 class="page-title">⚙️ <span>設定</span></h2>
+
+            <div class="settings-section" style="border-color: var(--accent-blue);">
+                <div class="settings-section-title" style="color: var(--accent-blue);">☁️ クラウド同期</div>
+                <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div class="setting-label">GAS Web App URL</div>
+                    <input type="text" class="setting-input wide" id="gasUrl" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+                </div>
+                <div style="margin-top: 12px; display: flex; gap: 8px;">
+                    <button class="export-btn" onclick="testConnection()" style="flex: 1;">🔗 接続テスト</button>
+                    <button class="export-btn" onclick="syncAllToCloud()" style="flex: 1;">☁️ 全同期</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">⏰ スケジュール</div>
+                <div class="setting-row"><div class="setting-label">起床</div><input type="time" class="setting-input" id="scheduleWakeUp" value="07:00"></div>
+                <div class="setting-row"><div class="setting-label">出社</div><input type="time" class="setting-input" id="scheduleWorkStart" value="09:30"></div>
+                <div class="setting-row"><div class="setting-label">退社</div><input type="time" class="setting-input" id="scheduleWorkEnd" value="18:30"></div>
+                <div class="setting-row"><div class="setting-label">変成室</div><input type="time" class="setting-input" id="scheduleTransmutation" value="20:30"></div>
+                <div class="setting-row"><div class="setting-label">就寝</div><input type="time" class="setting-input" id="scheduleSleep" value="23:30"></div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">📊 ステータス</div>
+                <div class="setting-row"><div class="setting-label">借金（万円）</div><input type="number" class="setting-input" id="settingDebt" value="200"></div>
+                <div class="setting-row"><div class="setting-label">作品数</div><input type="number" class="setting-input" id="settingWorks" value="1"></div>
+                <div class="setting-row"><div class="setting-label">連続週数</div><input type="number" class="setting-input" id="settingStreak" value="0"></div>
+            </div>
+
+            <button class="modal-btn" onclick="saveAllSettings()" style="margin-bottom: 16px;">💾 保存</button>
+
+            <div class="settings-section">
+                <div class="settings-section-title">📤 エクスポート</div>
+                <button class="export-btn" onclick="exportAllData()">📄 JSON</button>
+                <button class="export-btn" onclick="exportForNotebookLM()">🧠 Notebook LM用</button>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">🔐 セキュリティ</div>
+                <button class="export-btn" onclick="changePassword()" style="border-color: var(--accent-purple); color: var(--accent-purple);">🔑 パスワード変更</button>
+                <button class="export-btn" onclick="lockApp()" style="border-color: var(--warning); color: var(--warning);">🔒 ロック</button>
+            </div>
+
+            <div class="settings-section" style="border-color: #330000;">
+                <div class="settings-section-title" style="color: var(--alert);">⚠️ DANGER</div>
+                <button onclick="resetAllData()" style="width: 100%; padding: 12px; background: #1a0000; border: 1px solid var(--alert); border-radius: 8px; color: var(--alert); font-family: inherit; font-size: 0.8rem; cursor: pointer;">全リセット</button>
+            </div>
+        </div>
+
+        <!-- AI Page -->
+        <div class="page" id="page-ai">
+            <h2 class="page-title">🤖 <span>AI相談</span></h2>
+            <div class="settings-section">
+                <div class="settings-section-title">📋 プロンプト生成</div>
+                <button class="export-btn" onclick="generateAIPrompt()" style="border-color: var(--accent-purple); color: var(--accent-purple);">🧠 生成</button>
+            </div>
+            <div class="settings-section">
+                <textarea id="aiPromptOutput" readonly style="width: 100%; height: 200px; background: #0a0a0a; border: 1px solid #333; border-radius: 8px; color: var(--accent-green); font-family: inherit; font-size: 0.7rem; padding: 12px; resize: none; outline: none;" placeholder="プロンプト生成..."></textarea>
+                <button class="export-btn" onclick="copyAIPrompt()" style="margin-top: 8px;">📋 コピー</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-tabs" id="navTabs">
+        <div class="nav-tab active" onclick="showPage('main')"><span class="nav-tab-icon">🍄</span>TODAY</div>
+        <div class="nav-tab" onclick="showPage('scripts')"><span class="nav-tab-icon">🛡️</span>SCRIPTS</div>
+        <div class="nav-tab" onclick="showPage('log')"><span class="nav-tab-icon">📜</span>LOG</div>
+        <div class="nav-tab" onclick="showPage('ai')"><span class="nav-tab-icon">🤖</span>AI</div>
+        <div class="nav-tab" onclick="showPage('settings')"><span class="nav-tab-icon">⚙️</span>SETTINGS</div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="fireModal">
+        <div class="modal">
+            <div class="modal-title">🔥 火に焼かれそう</div>
+            <div class="modal-text">SNSで論争？一発逆転狙い？<br><br>1. スマホを置く<br>2. 深呼吸3回<br>3. 今日は何もしない<br><br><strong>日曜は菌糸を考えるな。</strong></div>
+            <button class="modal-btn" onclick="closeModal('fireModal')">理解した</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="emergencyModal">
+        <div class="modal">
+            <div class="modal-title" style="color: var(--alert);">🛑 EMERGENCY</div>
+            <div class="modal-text">・楽しくなければ中断<br>・睡眠7時間絶対<br>・借金返済5万/月<br>・完璧より完了</div>
+            <button class="modal-btn" style="background: var(--alert);" onclick="closeModal('emergencyModal')">確認した</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="outputModal">
+        <div class="modal">
+            <div class="modal-title" id="outputModalTitle">📤 出力を記録</div>
+            <textarea id="outputDescription" placeholder="何を出力した？" style="width: 100%; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; color: #fff; font-family: inherit; font-size: 0.85rem; padding: 10px; outline: none; resize: none; height: 80px; margin-bottom: 12px;"></textarea>
+            <button class="modal-btn" onclick="confirmOutput()">記録</button>
+            <button class="modal-btn secondary" onclick="closeModal('outputModal')">キャンセル</button>
+        </div>
+    </div>
+
+    <script>
+        // ========== Password Protection ==========
+        const PASS_KEY = 'mycelium_password_hash';
+        
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return hash.toString();
+        }
+        
+        function checkPassword() {
+            const input = document.getElementById('passwordInput');
+            const error = document.getElementById('lockError');
+            const storedHash = localStorage.getItem(PASS_KEY);
+            
+            if (!input.value) return;
+            
+            if (!storedHash) {
+                // First time - set password
+                if (input.value.length < 4) {
+                    error.innerText = '4文字以上で設定してください';
+                    return;
+                }
+                localStorage.setItem(PASS_KEY, simpleHash(input.value));
+                unlockApp();
+            } else {
+                // Check password
+                if (simpleHash(input.value) === storedHash) {
+                    unlockApp();
+                } else {
+                    error.innerText = 'パスワードが違います';
+                    input.value = '';
+                }
+            }
+        }
+        
+        function unlockApp() {
+            document.getElementById('lockScreen').classList.add('hidden');
+            document.getElementById('appContainer').classList.add('active');
+            document.getElementById('navTabs').classList.add('active');
+            init();
+        }
+        
+        function lockApp() {
+            document.getElementById('lockScreen').classList.remove('hidden');
+            document.getElementById('appContainer').classList.remove('active');
+            document.getElementById('navTabs').classList.remove('active');
+            document.getElementById('passwordInput').value = '';
+            document.getElementById('lockError').innerText = '';
+        }
+        
+        function changePassword() {
+            const newPass = prompt('新しいパスワードを入力（4文字以上）');
+            if (newPass && newPass.length >= 4) {
+                localStorage.setItem(PASS_KEY, simpleHash(newPass));
+                showToast('パスワードを変更しました');
+            } else if (newPass) {
+                alert('4文字以上で入力してください');
+            }
+        }
+        
+        document.getElementById('passwordInput').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') checkPassword();
+        });
+
+        // ========== State ==========
+        let currentOutputType = '';
+        const defaultSchedule = { wakeUp: '07:00', workStart: '09:30', workEnd: '18:30', transmutation: '20:30', sleep: '23:30' };
+
+        // ========== Cloud Sync ==========
+        function getGasUrl() { return localStorage.getItem('mycelium_gas_url') || ''; }
+        function isCloudEnabled() { return getGasUrl().length > 0; }
+
+        function updateSyncStatus(status) {
+            const el = document.getElementById('syncStatus');
+            el.className = 'sync-status ' + status;
+            el.innerText = { connected: '● Connected', disconnected: '● Offline', syncing: '● Syncing...' }[status] || '● Unknown';
+        }
+
+        async function sendToCloud(data) {
+            const url = getGasUrl();
+            if (!url) return null;
+            updateSyncStatus('syncing');
+            try {
+                await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                updateSyncStatus('connected');
+                return true;
+            } catch (e) {
+                updateSyncStatus('disconnected');
+                return false;
+            }
+        }
+
+        async function testConnection() {
+            const url = document.getElementById('gasUrl').value;
+            if (!url) { alert('URLを入力'); return; }
+            localStorage.setItem('mycelium_gas_url', url);
+            showToast('接続テスト中...');
+            await sendToCloud({ type: 'status', updates: { test: 'ok' } });
+            showToast('✓ 接続完了');
+        }
+
+        async function syncAllToCloud() {
+            if (!isCloudEnabled()) { alert('URLを設定してください'); return; }
+            showToast('同期中...');
+            await sendToCloud({
+                type: 'sync',
+                outputs: JSON.parse(localStorage.getItem('mycelium_history')) || [],
+                changes: JSON.parse(localStorage.getItem('mycelium_changes')) || [],
+                status: { debt: localStorage.getItem('mycelium_debt') || '200', works: localStorage.getItem('mycelium_works') || '1', streak: localStorage.getItem('mycelium_streak') || '0' },
+                schedule: JSON.parse(localStorage.getItem('mycelium_schedule')) || defaultSchedule
+            });
+            showToast('✓ 同期完了');
+        }
+
+        // ========== Schedule ==========
+        function timeToHour(t) { const [h, m] = t.split(':').map(Number); return h + m / 60; }
+
+        function getSchedule() {
+            const s = JSON.parse(localStorage.getItem('mycelium_schedule')) || defaultSchedule;
+            const wake = timeToHour(s.wakeUp), workStart = timeToHour(s.workStart), workEnd = timeToHour(s.workEnd), trans = timeToHour(s.transmutation), sleep = timeToHour(s.sleep);
+            return [
+                { start: 0, end: wake, mode: "Recharging", text: "7時間睡眠死守。", tasks: [] },
+                { start: wake, end: wake + 0.5, mode: "Wake Up", text: "起床。水分補給。", tasks: ["水分補給"] },
+                { start: wake + 0.5, end: wake + 1, mode: "Scavenge", text: "散歩。", tasks: ["散歩"] },
+                { start: wake + 1, end: workStart, mode: "Commute", text: "通勤。", tasks: ["インプット"] },
+                { start: workStart, end: workEnd, mode: "Host Symbiosis", text: "擬態モード。", tasks: ["3回に1回親切", "定時退社準備"] },
+                { start: workEnd, end: workEnd + 0.5, mode: "Escape", text: "即退社。", tasks: ["退社"] },
+                { start: workEnd + 0.5, end: trans, mode: "Refuel", text: "夕食。", tasks: ["夕食", "仮眠"] },
+                { start: trans, end: trans + 1.5, mode: "TRANSMUTATION", text: "90分一本勝負。", tasks: ["90分作業"] },
+                { start: trans + 1.5, end: sleep, mode: "Shutdown", text: "デジタルデトックス。", tasks: ["入浴"] },
+                { start: sleep, end: 24, mode: "Sleep", text: "就寝。", tasks: [] }
+            ];
+        }
+
+        function getSaturdaySchedule() {
+            return [
+                { start: 0, end: 8, mode: "Recharging", text: "ゆっくり寝ろ。", tasks: [] },
+                { start: 8, end: 12, mode: "Creation", text: "作品制作。", tasks: ["制作"] },
+                { start: 12, end: 18, mode: "Create/Rest", text: "撮影・投稿。", tasks: ["SNS"] },
+                { start: 18, end: 24, mode: "Free", text: "自由。", tasks: [] }
+            ];
+        }
+
+        function getSundaySchedule() {
+            return [{ start: 0, end: 24, mode: "REST DAY", text: "菌糸を考えるな。", tasks: ["休息", "来週の問い"] }];
+        }
+
+        function getSchedules() {
+            const day = new Date().getDay();
+            return day === 0 ? getSundaySchedule() : day === 6 ? getSaturdaySchedule() : getSchedule();
+        }
+
+        function getCurrentSchedule(hour) {
+            return getSchedules().find(s => hour >= s.start && hour < s.end) || getSchedules()[0];
+        }
+
+        // ========== Navigation ==========
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
+            if (event && event.target) event.target.closest('.nav-tab').classList.add('active');
+            if (id === 'log') renderActivityLog();
+            if (id === 'settings') loadSettings();
+        }
+
+        function showLogTab(name) {
+            document.querySelectorAll('.log-tab-content').forEach(t => t.style.display = 'none');
+            document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('logTab-' + name).style.display = 'block';
+            event.target.classList.add('active');
+            if (name === 'activity') renderActivityLog();
+            if (name === 'history') renderHistory();
+            if (name === 'changes') renderChanges();
+        }
+
+        // ========== Clock ==========
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('date').innerText = now.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' });
+            const hour = now.getHours() + now.getMinutes() / 60;
+            updateMode(hour);
+            updateProgress(hour);
+            updateWeekNumber();
+        }
+
+        function updateMode(hour) {
+            const status = getCurrentSchedule(hour);
+            const modeEl = document.getElementById('modeText');
+            if (modeEl.innerText !== status.mode) {
+                modeEl.innerText = status.mode;
+                document.getElementById('instructionText').innerText = status.text;
+                document.body.className = '';
+                if (status.mode === "TRANSMUTATION") document.body.classList.add('transmutation-mode');
+                else if (status.mode === "REST DAY") document.body.classList.add('rest-mode');
+                renderTasks(status.tasks, status.mode);
+            }
+        }
+
+        function updateProgress(hour) {
+            const status = getCurrentSchedule(hour);
+            document.getElementById('progressBar').style.width = Math.min(100, Math.max(0, ((hour - status.start) / (status.end - status.start)) * 100)) + '%';
+        }
+
+        function updateWeekNumber() {
+            const now = new Date(), start = new Date(now.getFullYear(), 0, 1);
+            document.getElementById('weekNum').innerText = 'WEEK ' + Math.ceil((((now - start) / 86400000) + start.getDay() + 1) / 7);
+        }
+
+        // ========== Tasks ==========
+        function renderTasks(tasks, modeKey) {
+            const list = document.getElementById('taskList');
+            list.innerHTML = '';
+            const saved = JSON.parse(localStorage.getItem('mycelium_tasks_' + new Date().toDateString())) || {};
+            tasks.forEach((task, i) => {
+                const key = modeKey + '_' + i, done = saved[key] || false;
+                const div = document.createElement('div');
+                div.className = 'task-item' + (done ? ' done' : '');
+                div.innerHTML = `<div class="checkbox">${done ? '✔' : ''}</div><div class="task-text">${task}</div>`;
+                div.onclick = () => toggleTask(div, modeKey, i, task);
+                list.appendChild(div);
+            });
+        }
+
+        async function toggleTask(el, modeKey, index, taskName) {
+            el.classList.toggle('done');
+            const done = el.classList.contains('done');
+            el.querySelector('.checkbox').innerText = done ? '✔' : '';
+            const key = 'mycelium_tasks_' + new Date().toDateString();
+            const data = JSON.parse(localStorage.getItem(key)) || {};
+            data[modeKey + '_' + index] = done;
+            localStorage.setItem(key, JSON.stringify(data));
+            logActivity('task', `${done ? '✓' : '○'} ${taskName}`);
+            if (isCloudEnabled()) await sendToCloud({ type: 'task', mode: modeKey, taskName, completed: done });
+        }
+
+        // ========== Activity ==========
+        function logActivity(type, message) {
+            const log = JSON.parse(localStorage.getItem('mycelium_activity_' + new Date().toDateString())) || [];
+            log.push({ time: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }), type, message });
+            localStorage.setItem('mycelium_activity_' + new Date().toDateString(), JSON.stringify(log));
+        }
+
+        function renderActivityLog() {
+            const log = JSON.parse(localStorage.getItem('mycelium_activity_' + new Date().toDateString())) || [];
+            const list = document.getElementById('activityList');
+            if (!log.length) { list.innerHTML = '<div class="activity-empty">今日の活動なし</div>'; return; }
+            list.innerHTML = log.slice().reverse().map(item => `<div class="activity-item"><div class="activity-time">${item.time}</div><div class="activity-icon">${{ mode: '🔄', task: '✅', output: '📤' }[item.type] || '📌'}</div><div class="activity-text">${item.message}</div></div>`).join('');
+        }
+
+        // ========== Output ==========
+        function recordOutput(type) {
+            currentOutputType = type;
+            document.getElementById('outputModalTitle').innerText = { work: '✨ 作品', fail: '💀 失敗', survive: '🫀 生存' }[type];
+            document.getElementById('outputDescription').value = '';
+            document.getElementById('outputModal').classList.add('active');
+        }
+
+        async function confirmOutput() {
+            const desc = document.getElementById('outputDescription').value || '（詳細なし）';
+            const history = JSON.parse(localStorage.getItem('mycelium_history')) || [];
+            history.unshift({ date: new Date().toISOString(), type: currentOutputType, description: desc });
+            if (history.length > 100) history.pop();
+            localStorage.setItem('mycelium_history', JSON.stringify(history));
+            const weekKey = getWeekKey();
+            localStorage.setItem('mycelium_week_' + weekKey, (parseInt(localStorage.getItem('mycelium_week_' + weekKey)) || 0) + 1);
+            logActivity('output', `出力: ${currentOutputType}`);
+            logChange(`出力: ${currentOutputType}`);
+            if (isCloudEnabled()) await sendToCloud({ type: 'output', outputType: currentOutputType, description: desc });
+            updateStats();
+            closeModal('outputModal');
+            showToast('✓ 記録しました');
+        }
+
+        function getWeekKey() {
+            const now = new Date(), start = new Date(now.getFullYear(), 0, 1);
+            return now.getFullYear() + '-W' + Math.ceil((((now - start) / 86400000) + start.getDay() + 1) / 7);
+        }
+
+        // ========== History ==========
+        function renderHistory() {
+            const history = JSON.parse(localStorage.getItem('mycelium_history')) || [];
+            const list = document.getElementById('historyList');
+            if (!history.length) { list.innerHTML = '<div class="history-empty">出力なし</div>'; return; }
+            list.innerHTML = history.map(i => `<div class="history-item"><span class="history-date">${new Date(i.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span><span class="history-type ${i.type}">${{ work: '作品', fail: '失敗', survive: '生存' }[i.type]}</span><div class="history-content">${i.description}</div></div>`).join('');
+        }
+
+        // ========== Changes ==========
+        function logChange(message) {
+            const changes = JSON.parse(localStorage.getItem('mycelium_changes')) || [];
+            changes.unshift({ date: new Date().toISOString(), message });
+            if (changes.length > 50) changes.pop();
+            localStorage.setItem('mycelium_changes', JSON.stringify(changes));
+        }
+
+        function renderChanges() {
+            const changes = JSON.parse(localStorage.getItem('mycelium_changes')) || [];
+            const list = document.getElementById('changesList');
+            if (!changes.length) { list.innerHTML = '<div class="history-empty">変更なし</div>'; return; }
+            list.innerHTML = changes.map(i => `<div class="history-item"><span class="history-date">${new Date(i.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><span class="history-type setting">変更</span><div class="history-content">${i.message}</div></div>`).join('');
+        }
+
+        // ========== Settings ==========
+        function loadSettings() {
+            const s = JSON.parse(localStorage.getItem('mycelium_schedule')) || defaultSchedule;
+            document.getElementById('scheduleWakeUp').value = s.wakeUp;
+            document.getElementById('scheduleWorkStart').value = s.workStart;
+            document.getElementById('scheduleWorkEnd').value = s.workEnd;
+            document.getElementById('scheduleTransmutation').value = s.transmutation;
+            document.getElementById('scheduleSleep').value = s.sleep;
+            document.getElementById('settingDebt').value = localStorage.getItem('mycelium_debt') || '200';
+            document.getElementById('settingWorks').value = localStorage.getItem('mycelium_works') || '1';
+            document.getElementById('settingStreak').value = localStorage.getItem('mycelium_streak') || '0';
+            document.getElementById('gasUrl').value = localStorage.getItem('mycelium_gas_url') || '';
+        }
+
+        async function saveAllSettings() {
+            localStorage.setItem('mycelium_schedule', JSON.stringify({
+                wakeUp: document.getElementById('scheduleWakeUp').value,
+                workStart: document.getElementById('scheduleWorkStart').value,
+                workEnd: document.getElementById('scheduleWorkEnd').value,
+                transmutation: document.getElementById('scheduleTransmutation').value,
+                sleep: document.getElementById('scheduleSleep').value
+            }));
+            localStorage.setItem('mycelium_debt', document.getElementById('settingDebt').value);
+            localStorage.setItem('mycelium_works', document.getElementById('settingWorks').value);
+            localStorage.setItem('mycelium_streak', document.getElementById('settingStreak').value);
+            localStorage.setItem('mycelium_gas_url', document.getElementById('gasUrl').value);
+            logChange('設定を保存');
+            if (isCloudEnabled()) {
+                await sendToCloud({ type: 'change', category: 'settings', message: '設定更新' });
+                await sendToCloud({ type: 'status', updates: { debt: document.getElementById('settingDebt').value, works: document.getElementById('settingWorks').value, streak: document.getElementById('settingStreak').value } });
+            }
+            updateStats(); updateClock();
+            showToast('✓ 保存しました');
+        }
+
+        function updateStats() {
+            document.getElementById('debtDisplay').innerText = '¥' + (localStorage.getItem('mycelium_debt') || '200') + '万';
+            document.getElementById('worksDisplay').innerText = localStorage.getItem('mycelium_works') || '1';
+            document.getElementById('streakDisplay').innerText = (localStorage.getItem('mycelium_streak') || '0') + '週';
+            document.getElementById('questionCount').innerText = localStorage.getItem('mycelium_week_' + getWeekKey()) || '0';
+            updateSyncStatus(isCloudEnabled() ? 'connected' : 'disconnected');
+        }
+
+        // ========== Export ==========
+        function exportAllData() {
+            const blob = new Blob([JSON.stringify({
+                exportDate: new Date().toISOString(), version: '7.0',
+                schedule: JSON.parse(localStorage.getItem('mycelium_schedule')) || defaultSchedule,
+                status: { debt: localStorage.getItem('mycelium_debt'), works: localStorage.getItem('mycelium_works'), streak: localStorage.getItem('mycelium_streak') },
+                history: JSON.parse(localStorage.getItem('mycelium_history')) || [],
+                changes: JSON.parse(localStorage.getItem('mycelium_changes')) || []
+            }, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mycelium-${new Date().toISOString().split('T')[0]}.json`; a.click();
+        }
+
+        function exportForNotebookLM() {
+            let r = `# Mycelium OS Report\n${new Date().toLocaleString('ja-JP')}\n\n## Status\n- Debt: ${localStorage.getItem('mycelium_debt')}万\n- Works: ${localStorage.getItem('mycelium_works')}\n- Streak: ${localStorage.getItem('mycelium_streak')}週\n\n## Outputs\n`;
+            (JSON.parse(localStorage.getItem('mycelium_history')) || []).slice(0, 10).forEach(i => { r += `- [${new Date(i.date).toLocaleDateString('ja-JP')}] ${i.type}: ${i.description}\n`; });
+            const blob = new Blob([r], { type: 'text/markdown' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mycelium-report.md'; a.click();
+        }
+
+        // ========== AI ==========
+        function generateAIPrompt() {
+            document.getElementById('aiPromptOutput').value = `あなたは私の参謀です。\n\n## 状況\n- 27歳男性、会社員\n- 借金: ${localStorage.getItem('mycelium_debt')}万\n- 作品数: ${localStorage.getItem('mycelium_works')}\n- 連続出力: ${localStorage.getItem('mycelium_streak')}週\n- 今週の問い: ${localStorage.getItem('mycelium_weekly_q') || '未設定'}\n\n## 目標\n菌糸で巨大建造物を作るアーティストになる\n\n## 質問\n1. 今週の最優先は？\n2. リスクは？\n3. モチベ維持法は？`;
+        }
+
+        function copyAIPrompt() {
+            navigator.clipboard.writeText(document.getElementById('aiPromptOutput').value).then(() => showToast('コピーしました'));
+        }
+
+        // ========== Misc ==========
+        function copyScript(btn) { navigator.clipboard.writeText(btn.previousElementSibling.innerText).then(() => { btn.innerText = '✓'; setTimeout(() => btn.innerText = '📋 コピー', 1500); }); }
+        function showFireWarning() { document.getElementById('fireModal').classList.add('active'); }
+        function showEmergency() { document.getElementById('emergencyModal').classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function resetAllData() { if (confirm('リセット？')) { localStorage.clear(); location.reload(); } }
+        function showToast(msg) { const t = document.getElementById('toast'); t.innerText = msg; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000); }
+
+        // ========== Log Input ==========
+        let logTimeout;
+        document.getElementById('logInput').addEventListener('input', e => {
+            localStorage.setItem('scavenge_log_' + new Date().toDateString(), e.target.value);
+            clearTimeout(logTimeout);
+            logTimeout = setTimeout(async () => { if (isCloudEnabled() && e.target.value) await sendToCloud({ type: 'log', content: e.target.value }); }, 3000);
+        });
+        document.getElementById('weeklyQuestion').addEventListener('input', async e => {
+            localStorage.setItem('mycelium_weekly_q', e.target.value);
+            if (isCloudEnabled()) await sendToCloud({ type: 'question', question: e.target.value });
+        });
+
+        // ========== Init ==========
+        function init() {
+            document.getElementById('logInput').value = localStorage.getItem('scavenge_log_' + new Date().toDateString()) || '';
+            document.getElementById('weeklyQuestion').value = localStorage.getItem('mycelium_weekly_q') || '';
+            updateStats(); updateClock();
+            setInterval(updateClock, 1000);
+        }
+    </script>
+</body>
+</html>
