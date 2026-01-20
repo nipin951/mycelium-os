@@ -816,7 +816,42 @@
             const history = JSON.parse(localStorage.getItem('mycelium_history')) || [];
             const list = document.getElementById('historyList');
             if (!history.length) { list.innerHTML = '<div class="history-empty">出力なし</div>'; return; }
-            list.innerHTML = history.map(i => `<div class="history-item"><span class="history-date">${new Date(i.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span><span class="history-type ${i.type}">${{ work: '作品', fail: '失敗', survive: '生存' }[i.type]}</span><div class="history-content">${i.description}</div></div>`).join('');
+            list.innerHTML = history.map((item, index) => `<div class="history-item">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span class="history-date">${new Date(item.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span>
+                        <span class="history-type ${item.type}">${{ work: '作品', fail: '失敗', survive: '生存' }[item.type]}</span>
+                    </div>
+                    <button onclick="deleteOutput(${index})" style="background: none; border: 1px solid #333; color: #666; font-size: 0.6rem; padding: 4px 8px; border-radius: 4px; cursor: pointer;">削除</button>
+                </div>
+                <div class="history-content">${item.description}</div>
+            </div>`).join('');
+        }
+
+        async function deleteOutput(index) {
+            if (!confirm('この記録を削除しますか？')) return;
+            
+            const history = JSON.parse(localStorage.getItem('mycelium_history')) || [];
+            const deleted = history[index];
+            
+            // 履歴から削除
+            history.splice(index, 1);
+            localStorage.setItem('mycelium_history', JSON.stringify(history));
+            
+            // 削除記録をSpreadsheetに送信
+            if (isCloudEnabled()) {
+                await sendToCloud({
+                    type: 'delete',
+                    originalDate: deleted.date,
+                    originalType: deleted.type,
+                    originalDescription: deleted.description
+                });
+            }
+            
+            logChange(`出力を削除: ${deleted.type}`);
+            updateStats();
+            renderHistory();
+            showToast('削除しました');
         }
 
         // ========== Changes ==========
