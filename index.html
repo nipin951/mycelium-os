@@ -452,8 +452,9 @@
             <div class="settings-section">
                 <div class="settings-section-title">📊 ステータス</div>
                 <div class="setting-row"><div class="setting-label">借金（万円）</div><input type="number" class="setting-input" id="settingDebt" value="200"></div>
-                <div class="setting-row"><div class="setting-label">作品数</div><input type="number" class="setting-input" id="settingWorks" value="1"></div>
-                <div class="setting-row"><div class="setting-label">連続週数</div><input type="number" class="setting-input" id="settingStreak" value="0"></div>
+                <div style="font-size: 0.7rem; color: #555; padding: 10px 0;">
+                    ※ 作品数・連続週数は出力記録から自動計算
+                </div>
             </div>
 
             <button class="modal-btn" onclick="saveAllSettings()" style="margin-bottom: 16px;">💾 保存</button>
@@ -638,7 +639,7 @@
                 type: 'sync',
                 outputs: JSON.parse(localStorage.getItem('mycelium_history')) || [],
                 changes: JSON.parse(localStorage.getItem('mycelium_changes')) || [],
-                status: { debt: localStorage.getItem('mycelium_debt') || '200', works: localStorage.getItem('mycelium_works') || '1', streak: localStorage.getItem('mycelium_streak') || '0' },
+                status: { debt: localStorage.getItem('mycelium_debt') || '200', works: countWorks(), streak: calcStreak() },
                 schedule: JSON.parse(localStorage.getItem('mycelium_schedule')) || defaultSchedule
             });
             showToast('✓ 同期完了');
@@ -842,8 +843,6 @@
             document.getElementById('scheduleTransmutation').value = s.transmutation;
             document.getElementById('scheduleSleep').value = s.sleep;
             document.getElementById('settingDebt').value = localStorage.getItem('mycelium_debt') || '200';
-            document.getElementById('settingWorks').value = localStorage.getItem('mycelium_works') || '1';
-            document.getElementById('settingStreak').value = localStorage.getItem('mycelium_streak') || '0';
             document.getElementById('gasUrl').value = localStorage.getItem('mycelium_gas_url') || '';
         }
 
@@ -856,13 +855,11 @@
                 sleep: document.getElementById('scheduleSleep').value
             }));
             localStorage.setItem('mycelium_debt', document.getElementById('settingDebt').value);
-            localStorage.setItem('mycelium_works', document.getElementById('settingWorks').value);
-            localStorage.setItem('mycelium_streak', document.getElementById('settingStreak').value);
             localStorage.setItem('mycelium_gas_url', document.getElementById('gasUrl').value);
             logChange('設定を保存');
             if (isCloudEnabled()) {
                 await sendToCloud({ type: 'change', category: 'settings', message: '設定更新' });
-                await sendToCloud({ type: 'status', updates: { debt: document.getElementById('settingDebt').value, works: document.getElementById('settingWorks').value, streak: document.getElementById('settingStreak').value } });
+                await sendToCloud({ type: 'status', updates: { debt: document.getElementById('settingDebt').value, works: countWorks(), streak: calcStreak() } });
             }
             updateStats(); updateClock();
             showToast('✓ 保存しました');
@@ -870,10 +867,61 @@
 
         function updateStats() {
             document.getElementById('debtDisplay').innerText = '¥' + (localStorage.getItem('mycelium_debt') || '200') + '万';
-            document.getElementById('worksDisplay').innerText = localStorage.getItem('mycelium_works') || '1';
-            document.getElementById('streakDisplay').innerText = (localStorage.getItem('mycelium_streak') || '0') + '週';
+            document.getElementById('worksDisplay').innerText = countWorks();
+            document.getElementById('streakDisplay').innerText = calcStreak() + '週';
             document.getElementById('questionCount').innerText = localStorage.getItem('mycelium_week_' + getWeekKey()) || '0';
             updateSyncStatus(isCloudEnabled() ? 'connected' : 'disconnected');
+        }
+
+        // 作品数を自動カウント（typeが'work'のものだけ）
+        function countWorks() {
+            const history = JSON.parse(localStorage.getItem('mycelium_history')) || [];
+            return history.filter(item => item.type === 'work').length;
+        }
+
+        // 連続週数を自動計算
+        function calcStreak() {
+            const history = JSON.parse(localStorage.getItem('mycelium_history')) || [];
+            if (history.length === 0) return 0;
+
+            // 出力があった週を集める
+            const weeksWithOutput = new Set();
+            history.forEach(item => {
+                const date = new Date(item.date);
+                weeksWithOutput.add(getWeekKeyFromDate(date));
+            });
+
+            // 現在の週から遡ってストリークを計算
+            let streak = 0;
+            let checkDate = new Date();
+            
+            // 今週に出力があるかチェック
+            const thisWeek = getWeekKeyFromDate(checkDate);
+            if (!weeksWithOutput.has(thisWeek)) {
+                // 今週まだ出力がない場合、先週から計算開始
+                checkDate.setDate(checkDate.getDate() - 7);
+            }
+
+            // 遡ってチェック
+            for (let i = 0; i < 52; i++) {
+                const weekKey = getWeekKeyFromDate(checkDate);
+                if (weeksWithOutput.has(weekKey)) {
+                    streak++;
+                    checkDate.setDate(checkDate.getDate() - 7);
+                } else {
+                    break;
+                }
+            }
+
+            return streak;
+        }
+
+        // 日付からweekKeyを取得
+        function getWeekKeyFromDate(date) {
+            const d = new Date(date);
+            const start = new Date(d.getFullYear(), 0, 1);
+            const week = Math.ceil((((d - start) / 86400000) + start.getDay() + 1) / 7);
+            return d.getFullYear() + '-W' + week;
         }
 
         // ========== Export ==========
@@ -881,7 +929,7 @@
             const blob = new Blob([JSON.stringify({
                 exportDate: new Date().toISOString(), version: '7.0',
                 schedule: JSON.parse(localStorage.getItem('mycelium_schedule')) || defaultSchedule,
-                status: { debt: localStorage.getItem('mycelium_debt'), works: localStorage.getItem('mycelium_works'), streak: localStorage.getItem('mycelium_streak') },
+                status: { debt: localStorage.getItem('mycelium_debt'), works: countWorks(), streak: calcStreak() },
                 history: JSON.parse(localStorage.getItem('mycelium_history')) || [],
                 changes: JSON.parse(localStorage.getItem('mycelium_changes')) || []
             }, null, 2)], { type: 'application/json' });
@@ -889,7 +937,7 @@
         }
 
         function exportForNotebookLM() {
-            let r = `# Mycelium OS Report\n${new Date().toLocaleString('ja-JP')}\n\n## Status\n- Debt: ${localStorage.getItem('mycelium_debt')}万\n- Works: ${localStorage.getItem('mycelium_works')}\n- Streak: ${localStorage.getItem('mycelium_streak')}週\n\n## Outputs\n`;
+            let r = `# Mycelium OS Report\n${new Date().toLocaleString('ja-JP')}\n\n## Status\n- Debt: ${localStorage.getItem('mycelium_debt')}万\n- Works: ${countWorks()}\n- Streak: ${calcStreak()}週\n\n## Outputs\n`;
             (JSON.parse(localStorage.getItem('mycelium_history')) || []).slice(0, 10).forEach(i => { r += `- [${new Date(i.date).toLocaleDateString('ja-JP')}] ${i.type}: ${i.description}\n`; });
             const blob = new Blob([r], { type: 'text/markdown' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mycelium-report.md'; a.click();
@@ -897,7 +945,7 @@
 
         // ========== AI ==========
         function generateAIPrompt() {
-            document.getElementById('aiPromptOutput').value = `あなたは私の参謀です。\n\n## 状況\n- 27歳男性、会社員\n- 借金: ${localStorage.getItem('mycelium_debt')}万\n- 作品数: ${localStorage.getItem('mycelium_works')}\n- 連続出力: ${localStorage.getItem('mycelium_streak')}週\n- 今週の問い: ${localStorage.getItem('mycelium_weekly_q') || '未設定'}\n\n## 目標\n菌糸で巨大建造物を作るアーティストになる\n\n## 質問\n1. 今週の最優先は？\n2. リスクは？\n3. モチベ維持法は？`;
+            document.getElementById('aiPromptOutput').value = `あなたは私の参謀です。\n\n## 状況\n- 27歳男性、会社員\n- 借金: ${localStorage.getItem('mycelium_debt')}万\n- 作品数: ${countWorks()}\n- 連続出力: ${calcStreak()}週\n- 今週の問い: ${localStorage.getItem('mycelium_weekly_q') || '未設定'}\n\n## 目標\n菌糸で巨大建造物を作るアーティストになる\n\n## 質問\n1. 今週の最優先は？\n2. リスクは？\n3. モチベ維持法は？`;
         }
 
         function copyAIPrompt() {
