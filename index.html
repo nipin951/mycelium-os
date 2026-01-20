@@ -1002,9 +1002,12 @@
             clearTimeout(logTimeout);
             logTimeout = setTimeout(async () => { if (isCloudEnabled() && e.target.value) await sendToCloud({ type: 'log', content: e.target.value }); }, 3000);
         });
-        document.getElementById('weeklyQuestion').addEventListener('input', async e => {
+        
+        let questionTimeout;
+        document.getElementById('weeklyQuestion').addEventListener('input', e => {
             localStorage.setItem('mycelium_weekly_q', e.target.value);
-            if (isCloudEnabled()) await sendToCloud({ type: 'question', question: e.target.value });
+            clearTimeout(questionTimeout);
+            questionTimeout = setTimeout(async () => { if (isCloudEnabled() && e.target.value) await sendToCloud({ type: 'question', question: e.target.value }); }, 3000);
         });
 
         // ========== Init ==========
